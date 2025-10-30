@@ -1,51 +1,88 @@
-import { useState } from 'react';
-import { useAccount } from 'wagmi';
-import { useBoost } from '../hooks/useBoost';
+import React, { memo } from 'react';
+import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2 } from 'lucide-react';
+import { ProjectCardProps } from '../types';
 
-interface ProjectCardProps {
-  projectId: number;
-  projectName: string;
-  goalAmount: string;
-  currentAmount: string;
-}
+const ProjectCardComponent = memo(({ 
+  project, 
+  onBoost = async () => ({ status: 'success' } as const),
+  className = ''
+}: ProjectCardProps) => {
+  const [amount, setAmount] = React.useState('1.0');
+  const [showError, setShowError] = React.useState(false);
 
-function ProjectCard({ projectId, projectName, goalAmount, currentAmount }: ProjectCardProps) {
-  const { account } = useAccount();
-  const { boostContract, calculateProgress } = useBoost();
-
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  const handleBoost = async (amount: string) => {
-    if (!account) return;
-    
+  const handleBoost = async () => {
     try {
-      setIsProcessing(true);
-      await boostContract(projectId, amount, account);
+      const result = await onBoost(amount);
+      if (result.status === 'error') {
+        setShowError(true);
+      }
     } catch (error) {
-      console.error('Error boosting project:', error);
-    } finally {
-      setIsProcessing(false);
+      setShowError(true);
     }
   };
 
+  const progress = React.useMemo(() => {
+    return Math.min(
+      (parseFloat(project.currentAmount) / parseFloat(project.goalAmount)) * 100,
+      100
+    );
+  }, [project.currentAmount, project.goalAmount]);
+
   return (
-    <div className="max-w-md mx-auto my-4 p-4 border rounded-lg">
-      <h3 className="text-xl font-bold mb-2">{projectName}</h3>
-      <div className="h-2 mb-4 bg-gray-200 rounded-full overflow-hidden">
-        <div 
-          className="h-full bg-blue-500 transition-all duration-500"
-          style={{ width: `${calculateProgress(currentAmount, goalAmount)}%` }}
-        />
+    <div className={\`card p-4 \${className}\`}>
+      <h3 className="text-xl font-bold mb-2">{project.name}</h3>
+      
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Progress value={progress} className="h-2" />
+          <p className="text-sm text-muted-foreground">
+            {progress.toFixed(1)}% of {project.goalAmount} ETH
+          </p>
+        </div>
+
+        <div className="flex gap-4">
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="flex h-10 w-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
+            min="0.1"
+            step="0.1"
+          />
+          
+          <Button 
+            onClick={handleBoost}
+            disabled={amount === '0'}
+            className="flex items-center gap-2"
+          >
+            {amount === '0' ? (
+              'Enter Amount'
+            ) : (
+              <>
+                Support Project
+                {onBoost.isLoading && (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                )}
+              </>
+            )}
+          </Button>
+        </div>
+
+        {showError && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              Failed to support project. Please try again.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
-      <button 
-        onClick={() => handleBoost("1.0")}
-        disabled={isProcessing}
-        className="w-full py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
-      >
-        {isProcessing ? 'Processing...' : 'Support Project'}
-      </button>
     </div>
   );
-}
+});
 
-export default ProjectCard;
+ProjectCardComponent.displayName = 'ProjectCard';
+
+export default ProjectCardComponent;
